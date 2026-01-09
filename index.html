@@ -16,8 +16,27 @@
         /* Side Panel */
         #side-panel { width: 380px; background: white; border-left: 1px solid #ddd; overflow-y: auto; z-index: 10; display: flex; flex-direction: column; }
         .panel-header { padding: 20px; border-bottom: 2px solid var(--accent); background: white; font-weight: bold; color: var(--primary); font-size: 1.2rem; }
+        
+        /* Search Box Styles */
+        .search-container { padding: 15px; background: #fff; border-bottom: 1px solid #eee; position: sticky; top: 0; z-index: 20; }
+        .search-input { 
+            width: 100%; padding: 12px 15px; border: 2px solid #eee; border-radius: 25px; 
+            font-family: 'Noto Sans Thai'; font-size: 0.9rem; outline: none; transition: 0.3s;
+            box-sizing: border-box;
+        }
+        .search-input:focus { border-color: var(--primary); box-shadow: 0 0 8px rgba(95, 14, 138, 0.1); }
+
         #info-content { padding: 20px; flex: 1; display: flex; flex-direction: column; }
         
+        /* Search Result List */
+        .search-item { 
+            padding: 15px; border-bottom: 1px solid #f9f9f9; cursor: pointer; transition: 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .search-item:hover { background: #fdf7ff; border-left-color: var(--primary); }
+        .search-item strong { color: var(--primary); display: block; margin-bottom: 3px; }
+        .search-item small { color: #888; }
+
         /* Info UI */
         .branch-name { font-weight: 700; color: var(--primary); font-size: 1.4rem; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
         .info-label { font-weight: bold; color: #666; font-size: 0.9rem; margin-top: 10px; }
@@ -29,7 +48,6 @@
             border-radius: 8px; font-weight: bold; box-sizing: border-box;
         }
 
-        /* ปุ่มตำแหน่งของฉันแบบใหม่ */
         .btn-find-me {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
             background: var(--primary); color: white; padding: 12px 24px;
@@ -37,12 +55,10 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; z-index: 999;
             white-space: nowrap; border: 2px solid white; display: flex; align-items: center; gap: 8px;
         }
-        .btn-find-me:active { transform: translateX(-50%) scale(0.95); }
 
         .red-pin-svg { width: 30px; height: 30px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
         .user-loc-emoji { font-size: 35px; line-height: 1; }
 
-        /* จัดข้อความเริ่มต้นให้อยู่กลางหน้าจอทั้งคอมและมือถือ */
         .empty-state { 
             flex: 1; display: flex; flex-direction: column; 
             justify-content: center; align-items: center; 
@@ -52,7 +68,6 @@
         @media (max-width: 768px) {
             #main { flex-direction: column; }
             #side-panel { width: 100%; height: 45%; }
-            /* ขยับปุ่มขึ้นเล็กน้อยในมือถือเพื่อไม่ให้บังส่วนล่าง */
             .btn-find-me { bottom: 47%; font-size: 0.9rem; padding: 10px 20px; }
         }
     </style>
@@ -72,11 +87,16 @@
 
     <div id="side-panel">
         <div class="panel-header">รายละเอียดข้อมูล</div>
+        
+        <div class="search-container">
+            <input type="text" id="branchSearch" class="search-input" placeholder="พิมพ์ชื่อสาขา..." oninput="searchBranch()">
+        </div>
+
         <div id="info-content">
             <div class="empty-state">
                 <span style="font-size: 50px; margin-bottom: 20px;">📍</span>
                 <div style="font-size: 1.1rem; line-height: 1.6;">
-                    กรุณาเลือกสาขาบนแผนที่<br>เพื่อเรียกดูข้อมูลรายละเอียด
+                    กรุณาเลือกสาขาบนแผนที่<br>หรือค้นหาชื่อสาขาด้านบน
                 </div>
             </div>
         </div>
@@ -94,6 +114,7 @@
 
     var markersLayer = L.layerGroup().addTo(map);
     var userMarker;
+    var allBranches = []; // เก็บข้อมูลสาขาทั้งหมดไว้ค้นหา
 
     function loadData() {
         Papa.parse(sheetUrl, {
@@ -101,15 +122,15 @@
             header: false,
             skipEmptyLines: true,
             complete: function(results) {
-                renderMarkers(results.data);
+                allBranches = results.data.slice(1); // เก็บข้อมูลยกเว้น header
+                renderMarkers(allBranches);
             }
         });
     }
 
     function renderMarkers(data) {
         markersLayer.clearLayers();
-        for (let i = 1; i < data.length; i++) {
-            const row = data[i];
+        data.forEach((row) => {
             const name = row[0];
             const lat = parseFloat(row[1]); 
             const lng = parseFloat(row[2]);
@@ -135,8 +156,47 @@
                 marker.on('click', function() {
                     displayBranchInfo(name, people, note, lat, lng);
                     map.flyTo([lat, lng], 15);
+                    document.getElementById('branchSearch').value = ""; // ล้างช่องค้นหาเมื่อคลิกหมุด
                 });
             }
+        });
+    }
+
+    // ฟังก์ชันค้นหาสาขา
+    function searchBranch() {
+        const searchText = document.getElementById('branchSearch').value.toLowerCase();
+        const content = document.getElementById('info-content');
+        
+        if (searchText === "") {
+            content.innerHTML = `
+                <div class="empty-state">
+                    <span style="font-size: 50px; margin-bottom: 20px;">📍</span>
+                    <div style="font-size: 1.1rem; line-height: 1.6;">กรุณาเลือกสาขาบนแผนที่<br>หรือค้นหาชื่อสาขาด้านบน</div>
+                </div>`;
+            return;
+        }
+
+        const filtered = allBranches.filter(row => row[0].toLowerCase().includes(searchText));
+
+        if (filtered.length > 0) {
+            content.innerHTML = "";
+            filtered.forEach(row => {
+                const item = document.createElement('div');
+                item.className = 'search-item';
+                item.innerHTML = `<strong>${row[0]}</strong><small>กดเพื่อดูรายละเอียด</small>`;
+                item.onclick = () => {
+                    displayBranchInfo(row[0], row[3] || "0", row[4] || "-", parseFloat(row[1]), parseFloat(row[2]));
+                    map.flyTo([parseFloat(row[1]), parseFloat(row[2])], 15);
+                };
+                content.appendChild(item);
+            });
+        } else {
+            content.innerHTML = `
+                <div class="empty-state" style="color: var(--error);">
+                    <span style="font-size: 40px; margin-bottom: 10px;">❌</span>
+                    <div style="font-weight: bold;">ไม่พบข้อมูล</div>
+                    <div style="font-size: 0.9rem;">กรุณาสอบถามอีกครั้ง</div>
+                </div>`;
         }
     }
 
