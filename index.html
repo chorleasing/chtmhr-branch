@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>ระบบตรวจสอบสาขา</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --primary: #5f0e8a; --accent: #f5eb36; --error: #f90000; }
+        body { margin: 0; font-family: 'Noto Sans Thai', sans-serif; display: flex; flex-direction: column; height: 100vh; background: #f4f4f4; }
+        #header { padding: 15px 20px; background: white; display: flex; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 1000; }
+        #main { display: flex; flex: 1; position: relative; overflow: hidden; }
+        #map { flex: 1; z-index: 1; }
+        
+        /* Side Panel */
+        #side-panel { width: 380px; background: white; border-left: 1px solid #ddd; overflow-y: auto; z-index: 10; display: flex; flex-direction: column; }
+        .panel-header { padding: 20px; border-bottom: 2px solid var(--accent); background: white; font-weight: bold; color: var(--primary); font-size: 1.2rem; }
+        #info-content { padding: 20px; flex: 1; }
+        
+        /* Info UI */
+        .branch-name { font-weight: 700; color: var(--primary); font-size: 1.4rem; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .info-label { font-weight: bold; color: #666; font-size: 0.9rem; margin-top: 10px; }
+        .info-value { font-size: 1.1rem; color: #222; margin-bottom: 15px; }
+        
+        .btn-nav { 
+            display: block; width: 100%; text-align: center; margin-top: 25px; padding: 14px; 
+            background: #34a853; color: white; text-decoration: none; 
+            border-radius: 8px; font-weight: bold; transition: 0.3s;
+        }
+        .btn-nav:hover { background: #2d9147; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+
+        /* Markers (ใช้ SVG และ Emoji แทนไฟล์รูป) */
+        .red-pin-svg { width: 30px; height: 30px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
+        .user-loc-emoji { font-size: 35px; line-height: 1; text-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+
+        .fab-location {
+            position: absolute; bottom: 30px; right: 400px; width: 60px; height: 60px;
+            background: var(--accent); border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; z-index: 999;
+            font-size: 30px;
+        }
+
+        .empty-state { text-align: center; color: #999; margin-top: 100px; padding: 20px; }
+
+        @media (max-width: 768px) {
+            #main { flex-direction: column; }
+            #side-panel { width: 100%; height: 45%; }
+            .fab-location { right: 20px; bottom: 47%; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <div style="font-weight:700; color:var(--primary);">ระบบตรวจสอบสาขา</div>
+</div>
+
+<div id="main">
+    <div id="map"></div>
+    
+    <div class="fab-location" onclick="findMe()" title="ตำแหน่งของฉัน">🧍</div>
+
+    <div id="side-panel">
+        <div class="panel-header">รายละเอียดข้อมูล</div>
+        <div id="info-content">
+            <div class="empty-state">
+                <span style="font-size: 40px;">📍</span><br><br>
+                กรุณาเลือกสาขาบนแผนที่<br>เพื่อเรียกดูข้อมูลรายละเอียด
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
+<script>
+    const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRY_i5LWW_vfD8Dsxd2kwiLN50ZZhg9LZcK-JRMoZZu3TXYolGI4JDGbUE9J51z-IMrEQvtjkLQyqXP/pub?output=csv';
+
+    var map = L.map('map', {zoomControl: false}).setView([13.75, 100.50], 7);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+    var markersLayer = L.layerGroup().addTo(map);
+    var userMarker;
+
+    function loadData() {
+        Papa.parse(sheetUrl, {
+            download: true,
+            header: false,
+            skipEmptyLines: true,
+            complete: function(results) {
+                renderMarkers(results.data);
+            }
+        });
+    }
+
+    function renderMarkers(data) {
+        markersLayer.clearLayers();
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            const name = row[0];
+            const lat = parseFloat(row[1]); 
+            const lng = parseFloat(row[2]);
+            const people = row[3] || "0";
+            const note = row[4] || "-";
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+                // ใช้ SVG แทนรูปภาพพินแดง
+                const redPinSvg = `
+                    <svg class="red-pin-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#f90000"/>
+                        <circle cx="12" cy="9" r="3" fill="white"/>
+                    </svg>`;
+
+                const icon = L.divIcon({
+                    className: 'custom-pin',
+                    html: redPinSvg,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 30]
+                });
+
+                const marker = L.marker([lat, lng], {icon: icon}).addTo(markersLayer);
+                
+                marker.on('click', function() {
+                    displayBranchInfo(name, people, note, lat, lng);
+                    map.flyTo([lat, lng], 15);
+                });
+            }
+        }
+    }
+
+    function displayBranchInfo(name, people, note, lat, lng) {
+        document.getElementById('info-content').innerHTML = `
+            <div class="branch-name">สาขา ${name}</div>
+            
+            <div class="info-label">👥 จำนวนคนที่เปิดรับ</div>
+            <div class="info-value">${people} ท่าน</div>
+            
+            <div class="info-label">📝 หมายเหตุ</div>
+            <div class="info-value">${note}</div>
+            
+            <div class="info-label">📍 พิกัด</div>
+            <div class="info-value" style="font-size:0.8rem; color:#888;">${lat}, ${lng}</div>
+            
+            <a class="btn-nav" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank">
+                🚗 เปิดใน Google Maps
+            </a>
+        `;
+    }
+
+    function findMe() { map.locate({setView: true, maxZoom: 15}); }
+    
+    map.on('locationfound', function(e) {
+        if (userMarker) map.removeLayer(userMarker);
+        
+        // ใช้ Emoji 🧍 แทนการโหลดรูปคนเหลือง เพื่อป้องกันรูปไม่ขึ้น
+        const userIcon = L.divIcon({
+            className: 'user-icon',
+            html: `<div class="user-loc-emoji">🧍</div>`,
+            iconSize: [40, 40],
+            iconAnchor: [20, 40]
+        });
+        
+        userMarker = L.marker(e.latlng, {icon: userIcon}).addTo(map);
+        userMarker.bindPopup("คุณอยู่ที่นี่").openPopup();
+    });
+
+    loadData();
+</script>
+</body>
+</html>
