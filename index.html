@@ -16,7 +16,7 @@
         /* Side Panel */
         #side-panel { width: 380px; background: white; border-left: 1px solid #ddd; overflow-y: auto; z-index: 10; display: flex; flex-direction: column; }
         .panel-header { padding: 20px; border-bottom: 2px solid var(--accent); background: white; font-weight: bold; color: var(--primary); font-size: 1.2rem; }
-        #info-content { padding: 20px; flex: 1; }
+        #info-content { padding: 20px; flex: 1; display: flex; flex-direction: column; }
         
         /* Info UI */
         .branch-name { font-weight: 700; color: var(--primary); font-size: 1.4rem; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
@@ -26,27 +26,34 @@
         .btn-nav { 
             display: block; width: 100%; text-align: center; margin-top: 25px; padding: 14px; 
             background: #34a853; color: white; text-decoration: none; 
-            border-radius: 8px; font-weight: bold; transition: 0.3s;
+            border-radius: 8px; font-weight: bold; box-sizing: border-box;
         }
-        .btn-nav:hover { background: #2d9147; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
 
-        /* Markers (ใช้ SVG และ Emoji แทนไฟล์รูป) */
+        /* ปุ่มตำแหน่งของฉันแบบใหม่ */
+        .btn-find-me {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: var(--primary); color: white; padding: 12px 24px;
+            border-radius: 30px; font-weight: bold; font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; z-index: 999;
+            white-space: nowrap; border: 2px solid white; display: flex; align-items: center; gap: 8px;
+        }
+        .btn-find-me:active { transform: translateX(-50%) scale(0.95); }
+
         .red-pin-svg { width: 30px; height: 30px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
-        .user-loc-emoji { font-size: 35px; line-height: 1; text-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .user-loc-emoji { font-size: 35px; line-height: 1; }
 
-        .fab-location {
-            position: absolute; bottom: 30px; right: 400px; width: 60px; height: 60px;
-            background: var(--accent); border-radius: 50%; display: flex; align-items: center;
-            justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; z-index: 999;
-            font-size: 30px;
+        /* จัดข้อความเริ่มต้นให้อยู่กลางหน้าจอทั้งคอมและมือถือ */
+        .empty-state { 
+            flex: 1; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; 
+            text-align: center; color: #999; padding: 20px;
         }
-
-        .empty-state { text-align: center; color: #999; margin-top: 100px; padding: 20px; }
 
         @media (max-width: 768px) {
             #main { flex-direction: column; }
             #side-panel { width: 100%; height: 45%; }
-            .fab-location { right: 20px; bottom: 47%; }
+            /* ขยับปุ่มขึ้นเล็กน้อยในมือถือเพื่อไม่ให้บังส่วนล่าง */
+            .btn-find-me { bottom: 47%; font-size: 0.9rem; padding: 10px 20px; }
         }
     </style>
 </head>
@@ -59,14 +66,18 @@
 <div id="main">
     <div id="map"></div>
     
-    <div class="fab-location" onclick="findMe()" title="ตำแหน่งของฉัน">🧍</div>
+    <div class="btn-find-me" onclick="findMe()">
+        <span>📍</span> ตำแหน่งของฉันตอนนี้
+    </div>
 
     <div id="side-panel">
         <div class="panel-header">รายละเอียดข้อมูล</div>
         <div id="info-content">
             <div class="empty-state">
-                <span style="font-size: 40px;">📍</span><br><br>
-                กรุณาเลือกสาขาบนแผนที่<br>เพื่อเรียกดูข้อมูลรายละเอียด
+                <span style="font-size: 50px; margin-bottom: 20px;">📍</span>
+                <div style="font-size: 1.1rem; line-height: 1.6;">
+                    กรุณาเลือกสาขาบนแผนที่<br>เพื่อเรียกดูข้อมูลรายละเอียด
+                </div>
             </div>
         </div>
     </div>
@@ -106,7 +117,6 @@
             const note = row[4] || "-";
 
             if (!isNaN(lat) && !isNaN(lng)) {
-                // ใช้ SVG แทนรูปภาพพินแดง
                 const redPinSvg = `
                     <svg class="red-pin-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#f90000"/>
@@ -133,18 +143,14 @@
     function displayBranchInfo(name, people, note, lat, lng) {
         document.getElementById('info-content').innerHTML = `
             <div class="branch-name">สาขา ${name}</div>
-            
             <div class="info-label">👥 จำนวนคนที่เปิดรับ</div>
             <div class="info-value">${people} ท่าน</div>
-            
             <div class="info-label">📝 หมายเหตุ</div>
             <div class="info-value">${note}</div>
-            
             <div class="info-label">📍 พิกัด</div>
             <div class="info-value" style="font-size:0.8rem; color:#888;">${lat}, ${lng}</div>
-            
             <a class="btn-nav" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank">
-                🚗 เปิดใน Google Maps
+                🚗 เปิดนำทางใน Google Maps
             </a>
         `;
     }
@@ -153,15 +159,12 @@
     
     map.on('locationfound', function(e) {
         if (userMarker) map.removeLayer(userMarker);
-        
-        // ใช้ Emoji 🧍 แทนการโหลดรูปคนเหลือง เพื่อป้องกันรูปไม่ขึ้น
         const userIcon = L.divIcon({
             className: 'user-icon',
             html: `<div class="user-loc-emoji">🧍</div>`,
             iconSize: [40, 40],
             iconAnchor: [20, 40]
         });
-        
         userMarker = L.marker(e.latlng, {icon: userIcon}).addTo(map);
         userMarker.bindPopup("คุณอยู่ที่นี่").openPopup();
     });
